@@ -10,32 +10,34 @@ module.exports = function(homebridge) {
 
 function HomebridgeRoutineTriggerAccessory(log, config) {
   var accessory = this;
-
   this.log = log;
   this.name = config['name'];
   this.appServerUri = config['appServerUri']
   this.smartAppId = config['smartAppId']
   this.accessToken = config['accessToken'];
+  this.delayTime = config['delay'];
+  this.Timer;
 
   this.service = new Service.Switch(this.name);
 
   this.service
       .getCharacteristic(Characteristic.On)
-      .on('set', function(state, callback) {
+      .on('set', this.toggleSwitch.bind(this))
+}
+
+  HomebridgeRoutineTriggerAccessory.prototype.toggleSwitch = function(state, callback) {
+  this.log("Setting switch to " + state);
         if(state) {
-          var url = accessory.appServerUri + "/api/smartapps/installations/" + accessory.smartAppId + "/trigger-routine?access_token=" + accessory.accessToken;
-
-          accessory.log('ON Trigger met, activating routine `' + accessory.name + '`: ' + url);
-
+          var url = this.appServerUri + "/api/smartapps/installations/" + this.smartAppId + "/trigger-routine?access_token=" + this.accessToken;
+          //this.log('ON Trigger met, activating routine `' + this.name + '`: ' + url);
           request({
             uri: url,
             method: 'POST',
             json: {
-              "routine": accessory.name
+              "routine": this.name
             }
           }, function(err, response, body) {
             if (!err && response.statusCode == 200) {
-              accessory.log("Triggered successfully")
               callback();
             } else {
               var errorObj = {
@@ -58,17 +60,20 @@ function HomebridgeRoutineTriggerAccessory(log, config) {
               if(body && body.message) { errorMsg = body.message; }
               if(body && body.msg) { errorMsg = body.msg; }
 
-              accessory.log("Error '" + response.statusCode + "': " + errorMsg);
+              console.log("Error '" + response.statusCode + "': " + errorMsg);
               callback(errorObj);
             }
           });
+          clearTimeout(this.Timer);
+          this.Timer = setTimeout(function() {
+                this.service.getCharacteristic(Characteristic.On).setValue(false, undefined);
+              }.bind(this), this.delayTime);
         } else {
-          accessory.log('OFF trigger met, no action taken due to nature of routines');
+          //this.log('OFF trigger met, no action taken due to nature of routines');
           callback();
         }
-      });
-}
+      }
 
 HomebridgeRoutineTriggerAccessory.prototype.getServices = function() {
   return [this.service];
-};
+}
